@@ -4,9 +4,8 @@ AI assistant powered by MCP servers for blockchain and crypto capabilities.
 
 ## Features
 
-- **Multi-Server MCP Integration**: Connects to 4 external MCP servers
-  - Etherscan (Blockchain explorer, balances, transactions)
-  - Hive Intelligence (Crypto analytics)
+- **Multi-Server MCP Integration**: Connects to 3 external MCP servers
+  - Hive Intelligence (Crypto analytics, wallet balances)
   - CoinGecko (Price data, trending coins)
   - GoWeb3 (Web3 events)
 - **Groq LLM**: Uses `openai/gpt-oss-20b` model via Groq API
@@ -19,7 +18,6 @@ AI assistant powered by MCP servers for blockchain and crypto capabilities.
 
 - Python 3.12+
 - [Groq API Key](https://console.groq.com/)
-- [Etherscan API Key](https://etherscan.io/apis) (for blockchain queries)
 
 ### Local Development
 
@@ -37,7 +35,6 @@ pip install -r requirements.txt
 
 # Set environment variables
 export GROQ_API_KEY="your_groq_api_key"
-export ETHERSCAN_API_KEY="your_etherscan_api_key"
 
 # Run the app
 streamlit run src/web3agent/app.py
@@ -50,7 +47,6 @@ streamlit run src/web3agent/app.py
 docker build -t web3agent .
 docker run -p 8501:8501 \
   -e GROQ_API_KEY="your_groq_api_key" \
-  -e ETHERSCAN_API_KEY="your_etherscan_api_key" \
   web3agent
 ```
 
@@ -61,7 +57,6 @@ docker run -p 8501:8501 \
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `GROQ_API_KEY` | Groq API key for LLM | Yes |
-| `ETHERSCAN_API_KEY` | Etherscan API key for blockchain data | Yes |
 
 ### MCP Servers
 

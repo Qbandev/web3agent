@@ -41,6 +41,4 @@ services:
       # Secrets - set these in Render dashboard, not here!
       - key: GROQ_API_KEY
         sync: false  # Must be set manually in dashboard
-      - key: ETHERSCAN_API_KEY
-        sync: false  # Must be set manually in dashboard
 
