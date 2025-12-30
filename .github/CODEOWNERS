@@ -1,0 +1,28 @@
+# Web3Agent Code Owners
+# These owners will be requested for review when someone opens a PR
+
+# Default owners for everything in the repo
+* @Qbandev
+
+# Python source code
+/src/ @Qbandev
+
+# Tests
+/tests/ @Qbandev
+
+# Configuration files
+*.yaml @Qbandev
+*.yml @Qbandev
+*.toml @Qbandev
+
+# CI/CD workflows
+/.github/ @Qbandev
+
+# Docker
+Dockerfile @Qbandev
+docker-compose.yaml @Qbandev
+
+# Documentation
+README.md @Qbandev
+AGENTS.md @Qbandev
+

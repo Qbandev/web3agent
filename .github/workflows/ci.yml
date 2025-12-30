@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff check
+        run: ruff check src/ tests/
+
+      - name: Run ruff format check
+        run: ruff format --check src/ tests/
+
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          echo "🧪 Running test suite..."
+          python -m pytest tests/ -v --tb=short
+
+      - name: Verify package structure
+        run: |
+          echo "Checking package structure..."
+          
+          # Check main files exist
+          test -f "requirements.txt" || { echo "❌ requirements.txt missing"; exit 1; }
+          test -f "README.md" || { echo "❌ README.md missing"; exit 1; }
+          test -f "Dockerfile" || { echo "❌ Dockerfile missing"; exit 1; }
+          test -f "mcp_agent.config.yaml" || { echo "❌ mcp_agent.config.yaml missing"; exit 1; }
+          test -d "src/web3agent" || { echo "❌ src/web3agent directory missing"; exit 1; }
+          test -d "tests" || { echo "❌ tests directory missing"; exit 1; }
+          
+          echo "✅ Package structure validation passed"
+
+      - name: Test module import
+        run: |
+          echo "Testing module imports..."
+          PYTHONPATH=src python -c "from web3agent.mcp_client import MCPClient, Tool; print('✅ MCPClient imported')"
+          PYTHONPATH=src python -c "from web3agent.agent import WEB3_SERVERS; print(f'✅ Servers: {WEB3_SERVERS}')"
+          echo "✅ Module import test passed"
+
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: web3agent:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker image
+        run: |
+          echo "Testing Docker image..."
+          docker run --rm web3agent:test python -c "import streamlit; print('✅ Streamlit available')"
+          echo "✅ Docker image test passed"
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test, docker-build]
+    if: always()
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## 🚀 CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ${{ needs.lint.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ${{ needs.docker-build.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.lint.result }}" == "success" && 
+                "${{ needs.test.result }}" == "success" && 
+                "${{ needs.docker-build.result }}" == "success" ]]; then
+            echo "🎉 **All CI checks passed!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Some CI checks failed. Please review the results.**" >> $GITHUB_STEP_SUMMARY
+          fi
+
