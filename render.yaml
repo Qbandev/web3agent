@@ -1,0 +1,46 @@
+# Render Blueprint for Web3Agent
+# Documentation: https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: web3agent
+    runtime: docker
+    repo: https://github.com/Qbandev/web3agent
+    branch: main
+    
+    # Render region (oregon is default, options: oregon, frankfurt, singapore, ohio)
+    region: oregon
+    
+    # Instance type (free, starter, standard, pro)
+    plan: starter
+    
+    # Health check endpoint
+    healthCheckPath: /_stcore/health
+    
+    # Build and deploy settings
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    
+    # Auto-deploy on push to main
+    autoDeploy: true
+    
+    # Environment variables (secrets should be set in Render dashboard)
+    envVars:
+      - key: PORT
+        value: 8501
+      - key: STREAMLIT_SERVER_PORT
+        value: 8501
+      - key: STREAMLIT_SERVER_ADDRESS
+        value: 0.0.0.0
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: true
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: false
+      - key: PYTHONPATH
+        value: /app/src
+      # Secrets - set these in Render dashboard, not here!
+      - key: GROQ_API_KEY
+        sync: false  # Must be set manually in dashboard
+      - key: ETHERSCAN_API_KEY
+        sync: false  # Must be set manually in dashboard
+
