@@ -81,21 +81,6 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        # Show available tools in expander
-        if tool_count > 0:
-            with st.expander("🔧 Available Tools"):
-                tools = st.session_state.get("mcp_tools", [])
-                for tool in sorted(tools)[:20]:  # Show first 20
-                    st.markdown(
-                        f'<span style="color: #00ff9f; font-family: Share Tech Mono; font-size: 0.7em;">'
-                        f"› {tool}</span>",
-                        unsafe_allow_html=True,
-                    )
-                if len(tools) > 20:
-                    st.markdown(f"*... and {len(tools) - 20} more*")
-
-        st.markdown("---")
-
         if st.button("⌫ PURGE MEMORY"):
             st.session_state.messages = []
             st.rerun()
