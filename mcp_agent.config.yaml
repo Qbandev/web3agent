@@ -1,0 +1,47 @@
+# Web3Agent MCP Configuration
+# Documentation: https://docs.mcp-agent.com/configuration
+
+execution_engine: asyncio
+
+logger:
+  transports: [console]
+  level: info
+
+# LLM Provider - Groq (OpenAI-compatible)
+# Uses OPENAI_API_KEY and OPENAI_BASE_URL env vars
+openai:
+  api_key: "${OPENAI_API_KEY}"
+  base_url: "${OPENAI_BASE_URL:-https://api.groq.com/openai/v1}"
+
+default_model:
+  provider: openai
+  name: "openai/gpt-oss-20b"
+
+# MCP Server Connections
+mcp:
+  servers:
+    # Hive Intelligence - Crypto analytics
+    hive:
+      transport: streamable_http
+      url: "https://hiveintelligence.xyz/mcp"
+    
+    # CoinGecko - Price data (public, keyless)
+    coingecko:
+      transport: streamable_http
+      url: "https://mcp.api.coingecko.com/mcp"
+    
+    # GoWeb3 - Web3 utilities
+    goweb3:
+      transport: streamable_http
+      url: "https://mcp.goweb3.fyi/mcp/"
+    
+    # Etherscan - Blockchain explorer data (60+ chains)
+    # Requires API key: https://docs.etherscan.io/mcp-docs/introduction
+    etherscan:
+      transport: streamable_http
+      url: "https://mcp.etherscan.io/mcp"
+      headers:
+        Authorization: "Bearer ${ETHERSCAN_API_KEY}"
+      http_timeout_seconds: 60
+      read_timeout_seconds: 120
+
