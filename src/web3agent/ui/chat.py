@@ -38,7 +38,7 @@ def add_assistant_message(content: str) -> None:
 def render_sidebar() -> None:
     """Render the sidebar with server status and configuration."""
     with st.sidebar:
-        st.markdown("### ⟨ NEURAL LINKS ⟩")
+        st.markdown("### MCP SERVERS")
         st.markdown("---")
 
         connected = st.session_state.get("mcp_connected", False)
@@ -46,25 +46,26 @@ def render_sidebar() -> None:
         status_color = "#00ff9f" if connected else "#ff0066"
 
         servers = [
-            ("COINGECKO", "PRICE.FEED"),
-            ("GOWEB3", "UTIL.CORE"),
-            ("HIVE", "ANALYTICS.NET"),
+            ("COINGECKO", "Crypto prices, market caps, trending coins"),
+            ("HIVE", "Wallet balances, transactions, DeFi analytics"),
+            ("GOWEB3", "Web3 events and conferences"),
         ]
 
         for name, description in servers:
             st.markdown(
                 f'<span style="color: {status_color}; font-family: Share Tech Mono;">'
                 f"{status_icon}</span> "
-                f'<span style="color: #ff00ff; font-family: Orbitron; font-size: 0.8em;">'
+                f'<span style="color: #ff00ff; font-family: Orbitron; font-size: 0.85em;">'
                 f"{name}</span><br/>"
-                f'<span style="color: #666699; font-family: Share Tech Mono; font-size: 0.7em;">'
-                f"└─ {description}</span>",
+                f'<span style="color: #888; font-family: Share Tech Mono; font-size: 0.7em; '
+                f'padding-left: 1.2em; display: block; margin-top: 2px;">'
+                f"{description}</span>",
                 unsafe_allow_html=True,
             )
             st.markdown("")
 
         st.markdown("---")
-        st.markdown("### ⟨ SYSTEM ⟩")
+        st.markdown("### SYSTEM")
 
         tool_count = len(st.session_state.get("mcp_tools", []))
         status_text = "ONLINE" if connected else "OFFLINE"

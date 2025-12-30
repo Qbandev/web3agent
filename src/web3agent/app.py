@@ -144,31 +144,36 @@ You CANNOT: execute transactions, provide financial advice, or predict prices.
 - Provide valid JSON arguments. Use {{}} (empty object) for tools with no required params.
 - Read tool descriptions carefully - they include parameter types.
 
-## HIVE INTELLIGENCE PATTERN (CRITICAL)
-Hive has THREE types of tools - know the difference:
-- `hive_get_*_endpoints` → Discovery tools (NO parameters needed, returns list of endpoint names)
-- `hive_get_api_endpoint_schema` → Schema tool (takes "name" parameter, returns required params)
-- `hive_invoke_api_endpoint` → Execution tool (takes "name" and "params" to call an endpoint)
+## HIVE INTELLIGENCE PATTERN (MANDATORY 3-STEP WORKFLOW)
+Hive requires THREE steps - YOU MUST COMPLETE ALL THREE:
+1. `hive_get_*_endpoints` → Discovery (NO params, use {{}})
+2. `hive_get_api_endpoint_schema` → Get params (pass {{"name": "endpoint_name"}})
+3. `hive_invoke_api_endpoint` → Execute with {{"endpoint_name": "...", "args": {{...}}}}
 
-WORKFLOW for wallet balance:
-1. Call `hive_get_portfolio_wallet_endpoints` with {{}} → Returns ["user_total_balance", ...]
-2. Call `hive_get_api_endpoint_schema` with {{"name": "user_total_balance"}} → Returns required params
-3. Call `hive_invoke_api_endpoint` with {{"name": "user_total_balance", "params": {{"wallet_address": "0x...", "chain": "eth"}}}}
+EXAMPLE for wallet balance:
+1. `hive_get_portfolio_wallet_endpoints` with {{}}
+2. `hive_get_api_endpoint_schema` with {{"name": "user_total_balance"}}
+3. `hive_invoke_api_endpoint` with {{"endpoint_name": "user_total_balance", "args": {{"id": "0x..."}}}}
 
-COMMON MISTAKES TO AVOID:
-❌ Calling `user_total_balance` directly (it's NOT a tool, it's an endpoint name)
-❌ Passing endpoint params to `hive_get_portfolio_wallet_endpoints` (it takes NO params)
-✅ Use `hive_invoke_api_endpoint` with `name` and `params` keys
+EXAMPLE for transaction history:
+1. `hive_get_portfolio_wallet_endpoints` with {{}}
+2. `hive_get_api_endpoint_schema` with {{"name": "user_history"}}
+3. `hive_invoke_api_endpoint` with {{"endpoint_name": "user_history", "args": {{"id": "0x..."}}}}
+
+⚠️ CRITICAL RULES:
+- NEVER stop after step 1 or 2. ALWAYS complete step 3 to get actual data.
+- NEVER explain what you "would do" - actually DO IT.
+- Use "endpoint_name" and "args" for hive_invoke_api_endpoint (NOT "name" and "params").
+- Your response should contain REAL DATA from the API, not descriptions of tools.
 
 ## ERROR HANDLING
-- If a tool call fails, check the schema tool and RETRY with correct params
-- If no suitable tool exists, say so honestly
+- If a tool fails, check schema and RETRY with correct params
 - Never fabricate data
 
 ## OUTPUT FORMAT
-- Present data clearly with units and context
-- Use bullet points or tables for multiple values
-- Keep responses concise"""
+- Present ACTUAL DATA returned by tools, not tool descriptions
+- Use tables for structured data (balances, transactions)
+- Be concise - users want data, not explanations"""
 
     # Build message history
     messages = [{"role": "system", "content": system_prompt}]
@@ -201,6 +206,9 @@ COMMON MISTAKES TO AVOID:
             if "Failed to parse tool call arguments as JSON" in error_str:
                 logger.warning(f"LLM generated malformed JSON, retrying: {e}")
                 continue
+            if "output_parse_failed" in error_str or "could not be parsed" in error_str:
+                logger.warning(f"LLM output parsing failed, retrying: {e}")
+                continue
             if "not in request.tools" in error_str or "tool_use_failed" in error_str:
                 import re
 
@@ -214,15 +222,15 @@ COMMON MISTAKES TO AVOID:
                     feedback = (
                         f"ERROR: You passed wrong parameters to '{bad_tool}'. "
                         "Remember: hive_get_*_endpoints tools take NO parameters (use {{}}). "
-                        "To invoke an endpoint like 'user_total_balance', use hive_invoke_api_endpoint "
-                        'with {{"name": "user_total_balance", "params": {{...}}}}. '
-                        "First call hive_get_api_endpoint_schema to learn correct params."
+                        "For hive_invoke_api_endpoint, use: "
+                        '{{"endpoint_name": "user_history", "args": {{"id": "0x..."}}}}. '
+                        "Note: use 'endpoint_name' and 'args', NOT 'name' and 'params'."
                     )
                     messages.append(
                         {"role": "assistant", "content": f"I called {bad_tool} with wrong params"}
                     )
                     messages.append({"role": "user", "content": feedback})
-                    yield f"\n⚠️ Wrong parameters for '{bad_tool}'. Retrying correctly...\n"
+                    # Don't show internal error correction to user - just retry silently
                 else:
                     # LLM tried to call a non-existent tool
                     bad_tool_match = re.search(r"tool '([^']+)'", error_str)
@@ -236,7 +244,7 @@ COMMON MISTAKES TO AVOID:
                     )
                     messages.append({"role": "assistant", "content": f"I tried to call {bad_tool}"})
                     messages.append({"role": "user", "content": feedback})
-                    yield f"\n⚠️ '{bad_tool}' is not a tool. Correcting...\n"
+                    # Don't show internal error correction to user - just retry silently
                 continue
             logger.error(f"Groq API error: {e}", exc_info=True)
             yield "\n❌ An error occurred. Please try again.\n"
@@ -256,19 +264,22 @@ COMMON MISTAKES TO AVOID:
                 # Fix hallucinated tool names (e.g., singular vs plural)
                 corrected_name = mcp_client.find_closest_tool(tool_name)
                 if not corrected_name:
-                    yield f"⚠️ Tool `{tool_name}` not found. Skipping...\n"
+                    logger.warning(f"Tool `{tool_name}` not found, skipping")
                     continue
                 if corrected_name != tool_name:
-                    yield f"🔧 Calling `{corrected_name}` (corrected from `{tool_name}`)...\n"
+                    logger.info(f"Corrected tool name: {tool_name} -> {corrected_name}")
                     tool_name = corrected_name
-                else:
-                    yield f"🔧 Calling `{tool_name}`...\n"
+
+                # Show clean tool execution indicator
+                short_name = tool_name.split("_", 1)[-1].replace("_", " ").title()
+                yield f"\n▸ {short_name}..."
 
                 logger.info(f"Tool call: {tool_name} with {len(func_args)} args")
 
                 # Execute tool via MCP client
                 loop = get_event_loop()
                 result = loop.run_until_complete(mcp_client.call_tool(tool_name, func_args))
+                yield " ✓"
 
                 # Update sidebar with tool output
                 st.session_state.tool_output = result[:500]
@@ -299,12 +310,20 @@ COMMON MISTAKES TO AVOID:
     if tool_results:
         yield "\n\n📊 **Results:**\n\n"
 
-        # Ask model to summarize results
+        # Get the last invoke result (actual data), or last result if no invoke
+        invoke_results = [r for r in tool_results if "invoke" in r.get("tool", "")]
+        data_to_show = invoke_results[-1] if invoke_results else tool_results[-1]
+
+        # Ask model to summarize just the actual data
         summary_messages = [
             {
+                "role": "system",
+                "content": "You are a helpful assistant. Present data clearly using tables or bullet points. Be concise.",
+            },
+            {
                 "role": "user",
-                "content": f"Summarize this data for the user who asked: '{prompt}'\n\nData:\n{json.dumps(tool_results, indent=2)[:3000]}",
-            }
+                "content": f"The user asked: '{prompt}'\n\nHere is the data:\n{data_to_show.get('result', '')[:3000]}\n\nPresent this data clearly.",
+            },
         ]
 
         try:
@@ -317,8 +336,10 @@ COMMON MISTAKES TO AVOID:
             for chunk in final:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
-        except Exception:
-            yield f"\n\nRaw results: {json.dumps(tool_results, indent=2)[:1000]}"
+        except Exception as e:
+            logger.warning(f"Failed to summarize results: {e}")
+            # Show raw data as fallback
+            yield f"```\n{data_to_show.get('result', 'No data')[:2000]}\n```"
 
 
 def main() -> None:
@@ -327,7 +348,7 @@ def main() -> None:
 
     # Header
     st.markdown(
-        '<h1 style="text-align: center;">⟨ WEB3AGENT ⟩</h1>',
+        '<h1 style="text-align: center;">WEB3AGENT</h1>',
         unsafe_allow_html=True,
     )
 
@@ -356,7 +377,35 @@ def main() -> None:
 
         with st.chat_message("assistant"):
             try:
-                response = st.write_stream(stream_response(prompt, st.session_state.messages[:-1]))
+                # Show loading indicator while fetching data
+                status_placeholder = st.empty()
+                response_placeholder = st.empty()
+
+                response_parts = []
+                tool_count = 0
+
+                for chunk in stream_response(prompt, st.session_state.messages[:-1]):
+                    # Tool progress markers - update status
+                    if chunk.startswith("\n▸ "):
+                        tool_count += 1
+                        tool_name = chunk.replace("\n▸ ", "").replace("...", "")
+                        status_placeholder.markdown(
+                            f'<div style="color: #00ff9f; font-family: Share Tech Mono; padding: 10px;">'
+                            f'<span class="blinking">●</span> Fetching data... ({tool_name})'
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    elif chunk == " ✓":
+                        pass  # Tool done, continue
+                    else:
+                        # Clear status on first content
+                        if response_parts == []:
+                            status_placeholder.empty()
+                        response_parts.append(chunk)
+                        # Update response in real-time
+                        response_placeholder.markdown("".join(response_parts))
+
+                response = "".join(response_parts)
                 add_assistant_message(response)
             except Exception as e:
                 error_msg = f"Something went wrong: {e!s}"

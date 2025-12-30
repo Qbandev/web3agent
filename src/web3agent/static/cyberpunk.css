@@ -58,6 +58,8 @@ h2, h3, .stMarkdown h2, .stMarkdown h3 {
     padding: 1rem;
     margin: 0.5rem 0;
     position: relative;
+    overflow-x: auto;
+    max-width: 100%;
 }
 
 .stChatMessage::before {
@@ -74,6 +76,28 @@ h2, h3, .stMarkdown h2, .stMarkdown h3 {
 [data-testid="stChatMessageContent"] {
     font-family: 'Share Tech Mono', monospace !important;
     color: #e0e0ff;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+/* Tables in chat - ensure they scroll horizontally */
+[data-testid="stChatMessageContent"] table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    max-width: 100%;
+    font-size: 0.85em;
+}
+
+[data-testid="stChatMessageContent"] table th,
+[data-testid="stChatMessageContent"] table td {
+    padding: 4px 8px;
+    border: 1px solid rgba(0, 255, 159, 0.3);
+}
+
+[data-testid="stChatMessageContent"] table th {
+    background: rgba(0, 255, 159, 0.1);
+    color: #00ff9f;
 }
 
 /* Chat input */
@@ -167,15 +191,44 @@ hr {
     z-index: 999;
 }
 
-/* Hide Streamlit branding */
+/* Hide Streamlit branding but keep sidebar controls */
 #MainMenu {display: none !important;}
 .stAppDeployButton {display: none !important;}
 footer {display: none !important;}
-header[data-testid="stHeader"] {display: none !important;}
 .stToolbarActions {display: none !important;}
 .stDeployButton {display: none !important;}
 [data-testid="stToolbar"] {display: none !important;}
-[data-testid="stDecoration"] {display: none !important;}
+
+/* Keep header visible for sidebar toggle */
+header[data-testid="stHeader"] {
+    background: transparent !important;
+}
+
+/* Sidebar controls - ensure always visible */
+[data-testid="collapsedControl"],
+[data-testid="baseButton-headerNoPadding"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+}
+
+/* Style sidebar toggle buttons */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="collapsedControl"] button,
+[data-testid="baseButton-headerNoPadding"] {
+    color: #00ff9f !important;
+}
+[data-testid="stSidebarCollapseButton"]:hover,
+[data-testid="collapsedControl"] button:hover {
+    color: #ff00ff !important;
+}
+
+/* Streamlit running indicator - cyberpunk styled */
+[data-testid="stDecoration"] {
+    background: linear-gradient(90deg, #00ff9f, #ff00ff, #00ffff) !important;
+    height: 3px !important;
+}
 
 /* Remove all rounded corners for cyberpunk aesthetic */
 * {
@@ -215,3 +268,90 @@ input, textarea, select, button {
     animation: blink 1s infinite;
 }
 
+/* Pulsing dot animation for tool calls */
+@keyframes pulse {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 255, 159, 0.7);
+    }
+    50% { 
+        transform: scale(1.2);
+        box-shadow: 0 0 0 10px rgba(0, 255, 159, 0);
+    }
+}
+
+.tool-loading {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #00ff9f;
+    border-radius: 50% !important;
+    animation: pulse 1s ease-in-out infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* Spinner animation */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes glow-pulse {
+    0%, 100% { 
+        box-shadow: 0 0 5px #00ff9f, 0 0 10px #00ff9f, 0 0 15px #00ff9f;
+    }
+    50% { 
+        box-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    }
+}
+
+@keyframes cyber-scan {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.tool-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(0, 255, 159, 0.3);
+    border-top: 2px solid #00ff9f;
+    border-radius: 50% !important;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* Streamlit Status Container - Cyberpunk Style */
+[data-testid="stStatusWidget"] {
+    background: linear-gradient(135deg, rgba(10, 10, 15, 0.95), rgba(18, 18, 26, 0.95)) !important;
+    border: 1px solid #00ff9f !important;
+    box-shadow: 0 0 15px rgba(0, 255, 159, 0.3), inset 0 0 30px rgba(0, 255, 159, 0.05) !important;
+}
+
+[data-testid="stStatusWidget"][data-stale="false"] {
+    border-color: #00ff9f !important;
+    animation: glow-pulse 2s ease-in-out infinite !important;
+}
+
+[data-testid="stStatusWidget"] summary {
+    color: #00ff9f !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1px !important;
+}
+
+/* Status spinner override */
+[data-testid="stStatusWidget"] svg {
+    color: #00ff9f !important;
+    filter: drop-shadow(0 0 3px #00ff9f) !important;
+}
+
+/* Completed status */
+[data-testid="stStatusWidget"][aria-expanded="false"] {
+    border-color: #ff00ff !important;
+    box-shadow: 0 0 10px rgba(255, 0, 255, 0.3) !important;
+    animation: none !important;
+}
