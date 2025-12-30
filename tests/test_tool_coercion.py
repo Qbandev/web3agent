@@ -21,13 +21,13 @@ class TestToolCoerceArgs:
         )
 
     @pytest.fixture
-    def etherscan_tool(self) -> Tool:
-        """Create an Etherscan tool with known type hints."""
+    def hive_tool(self) -> Tool:
+        """Create a Hive tool with known type hints."""
         return Tool(
-            name="etherscan_balanceNative",
-            description="Get native balance",
+            name="hive_invoke_api_endpoint",
+            description="Invoke a Hive API endpoint",
             parameters={"type": "object", "properties": {}},
-            server="etherscan",
+            server="hive",
         )
 
     @pytest.fixture
@@ -104,13 +104,19 @@ class TestToolCoerceArgs:
         result = coingecko_tool.coerce_args({})
         assert result == {}
 
-    def test_etherscan_chainid(self, etherscan_tool: Tool):
-        """Etherscan chainid should be coerced to int."""
-        args = {"chainid": "1"}
-        result = etherscan_tool.coerce_args(args)
+    def test_goweb3_limit(self, unknown_tool: Tool):
+        """GoWeb3 limit should be coerced to int for goweb3 tools."""
+        tool = Tool(
+            name="goweb3_search_events_by_month",
+            description="Search events by month",
+            parameters={"type": "object", "properties": {}},
+            server="goweb3",
+        )
+        args = {"limit": "10"}
+        result = tool.coerce_args(args)
 
-        assert result["chainid"] == 1
-        assert isinstance(result["chainid"], int)
+        assert result["limit"] == 10
+        assert isinstance(result["limit"], int)
 
     def test_does_not_mutate_original(self, coingecko_tool: Tool):
         """Original args dict should not be mutated."""
@@ -136,7 +142,9 @@ class TestToolToGroqFunction:
 
         assert result["type"] == "function"
         assert result["function"]["name"] == "test_tool"
-        assert "[test]" in result["function"]["description"]
+        # New format: [ServerName|Category] description
+        assert "TEST" in result["function"]["description"]
+        assert "General" in result["function"]["description"]
         assert "A test tool" in result["function"]["description"]
         assert result["function"]["parameters"] == tool.parameters
 

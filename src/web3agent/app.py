@@ -121,38 +121,54 @@ def stream_response(prompt: str, history: list[dict]):
     groq_tools = mcp_client.get_groq_tools()
     logger.info(f"Passing {len(groq_tools)} tools to LLM")
 
-    # System prompt to guide tool usage
-    system_prompt = """You are Web3Agent, an AI assistant specializing in blockchain and cryptocurrency data.
+    # Get dynamic server context for better tool selection
+    server_context = mcp_client.get_server_context_for_llm()
+
+    # System prompt with dynamic server capabilities
+    system_prompt = f"""You are Web3Agent, an AI assistant specializing in blockchain and cryptocurrency data.
 
 ## CAPABILITIES
 You can retrieve: crypto prices, market data, trending coins, wallet balances, Web3 events, and analytics.
 You CANNOT: execute transactions, provide financial advice, or predict prices.
 
+{server_context}
+
 ## TOOL SELECTION
-1. ALWAYS check your available tools before responding. Use tool descriptions to match user intent.
-2. For simple questions you can answer directly (greetings, explanations), respond without tools.
-3. For data requests (prices, balances, trends), ALWAYS use the appropriate tool.
+1. Match user intent to the appropriate server based on capabilities above.
+2. Tool names include server prefix and category: [ServerName|Category] in descriptions.
+3. For simple questions (greetings, explanations), respond without tools.
+4. For data requests, ALWAYS use tools from the appropriate server.
 
 ## TOOL CALLING RULES
-- Only call tools EXACTLY as named in your tools list. Never guess or modify tool names.
-- Provide valid JSON arguments. Use {} (empty object) for tools requiring no parameters.
-- If a tool returns an error about required parameters, look for a `*_get_*_schema` tool to learn the correct format.
+- Only call tools EXACTLY as named in your tools list. Never guess or modify names.
+- Provide valid JSON arguments. Use {{}} (empty object) for tools with no required params.
+- Read tool descriptions carefully - they include parameter types.
 
-## MULTI-STEP PATTERNS
-Some data sources use a discovery pattern:
-1. Call a `*_get_*_endpoints` tool to list available API endpoints
-2. Use `*_invoke_api_endpoint` with name="<endpoint>" and params={...} to call them
-3. Endpoint names from step 1 are NOT tool names - they must be invoked via step 2
+## HIVE INTELLIGENCE PATTERN (CRITICAL)
+Hive has THREE types of tools - know the difference:
+- `hive_get_*_endpoints` → Discovery tools (NO parameters needed, returns list of endpoint names)
+- `hive_get_api_endpoint_schema` → Schema tool (takes "name" parameter, returns required params)
+- `hive_invoke_api_endpoint` → Execution tool (takes "name" and "params" to call an endpoint)
+
+WORKFLOW for wallet balance:
+1. Call `hive_get_portfolio_wallet_endpoints` with {{}} → Returns ["user_total_balance", ...]
+2. Call `hive_get_api_endpoint_schema` with {{"name": "user_total_balance"}} → Returns required params
+3. Call `hive_invoke_api_endpoint` with {{"name": "user_total_balance", "params": {{"wallet_address": "0x...", "chain": "eth"}}}}
+
+COMMON MISTAKES TO AVOID:
+❌ Calling `user_total_balance` directly (it's NOT a tool, it's an endpoint name)
+❌ Passing endpoint params to `hive_get_portfolio_wallet_endpoints` (it takes NO params)
+✅ Use `hive_invoke_api_endpoint` with `name` and `params` keys
 
 ## ERROR HANDLING
-- If a tool call fails with parameter errors, call the schema tool to learn correct params, then RETRY
-- If you cannot find a suitable tool, say so honestly
-- Never fabricate data or pretend a tool call succeeded
+- If a tool call fails, check the schema tool and RETRY with correct params
+- If no suitable tool exists, say so honestly
+- Never fabricate data
 
 ## OUTPUT FORMAT
-- Present numerical data clearly with units and context
-- Use bullet points or tables for multiple data points
-- Keep responses concise but informative"""
+- Present data clearly with units and context
+- Use bullet points or tables for multiple values
+- Keep responses concise"""
 
     # Build message history
     messages = [{"role": "system", "content": system_prompt}]
@@ -183,18 +199,44 @@ Some data sources use a discovery pattern:
                 groq_tools = mcp_client.get_groq_tools(servers=["coingecko"])
                 continue
             if "Failed to parse tool call arguments as JSON" in error_str:
-                # LLM generated malformed JSON - retry once
                 logger.warning(f"LLM generated malformed JSON, retrying: {e}")
                 continue
-            if "not in request.tools" in error_str:
-                # LLM hallucinated a tool name
-                logger.warning(f"LLM hallucinated tool name: {e}")
-                yield "\n⚠️ The AI tried to call a tool that doesn't exist. "
-                yield "Try rephrasing your question.\n"
-                return
-            if "tool_use_failed" in error_str:
-                # Generic tool use failure - retry once
-                logger.warning(f"Tool use failed, retrying: {e}")
+            if "not in request.tools" in error_str or "tool_use_failed" in error_str:
+                import re
+
+                # Different feedback based on error type
+                if "parameters for tool" in error_str and "did not match schema" in error_str:
+                    # LLM passed wrong params to a tool
+                    tool_match = re.search(r"parameters for tool (\S+)", error_str)
+                    bad_tool = tool_match.group(1) if tool_match else "unknown"
+                    logger.warning(f"LLM passed wrong params to '{bad_tool}': {e}")
+
+                    feedback = (
+                        f"ERROR: You passed wrong parameters to '{bad_tool}'. "
+                        "Remember: hive_get_*_endpoints tools take NO parameters (use {{}}). "
+                        "To invoke an endpoint like 'user_total_balance', use hive_invoke_api_endpoint "
+                        'with {{"name": "user_total_balance", "params": {{...}}}}. '
+                        "First call hive_get_api_endpoint_schema to learn correct params."
+                    )
+                    messages.append(
+                        {"role": "assistant", "content": f"I called {bad_tool} with wrong params"}
+                    )
+                    messages.append({"role": "user", "content": feedback})
+                    yield f"\n⚠️ Wrong parameters for '{bad_tool}'. Retrying correctly...\n"
+                else:
+                    # LLM tried to call a non-existent tool
+                    bad_tool_match = re.search(r"tool '([^']+)'", error_str)
+                    bad_tool = bad_tool_match.group(1) if bad_tool_match else "unknown"
+                    logger.warning(f"LLM hallucinated tool name '{bad_tool}': {e}")
+
+                    feedback = (
+                        f"ERROR: '{bad_tool}' is NOT a valid tool. "
+                        "Endpoint names like 'user_total_balance' are NOT tools. "
+                        'Use hive_invoke_api_endpoint with {{"name": "user_total_balance", "params": {{...}}}}.'
+                    )
+                    messages.append({"role": "assistant", "content": f"I tried to call {bad_tool}"})
+                    messages.append({"role": "user", "content": feedback})
+                    yield f"\n⚠️ '{bad_tool}' is not a tool. Correcting...\n"
                 continue
             logger.error(f"Groq API error: {e}", exc_info=True)
             yield "\n❌ An error occurred. Please try again.\n"
