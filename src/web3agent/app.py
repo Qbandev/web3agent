@@ -122,18 +122,26 @@ def stream_response(prompt: str, history: list[dict]):
     logger.info(f"Passing {len(groq_tools)} tools to LLM")
 
     # System prompt to guide tool usage
-    system_prompt = """You are a Web3 assistant with access to blockchain tools.
+    system_prompt = """You are Web3Agent, an AI assistant for blockchain and cryptocurrency queries.
 
-IMPORTANT RULES:
-1. ONLY call tools from the provided tools list. Never invent tool names.
-2. Some tools return lists of "endpoints" or "APIs" - these are NOT callable tools.
-   When you see endpoint names like "user_total_balance" or "retrieve_topic_metrics"
-   in a tool's response, you must use `hive_invoke_api_endpoint` to call them.
-3. For Hive wallet queries, use this pattern:
-   - Call `hive_invoke_api_endpoint` with: name="user_total_balance", params={"address": "0x...", "chain_id": 1}
-4. For crypto prices, use `coingecko_*` tools directly.
-5. For Web3 events, use `goweb3_*` tools directly.
-6. Be concise. Present data clearly with formatting."""
+TOOL USAGE PRINCIPLES:
+1. Only call tools from your provided tools list. Never invent or guess tool names.
+2. Always provide valid JSON for arguments. Use {} when no arguments needed.
+3. Read tool descriptions carefully - they explain what each tool does and what parameters it needs.
+
+TOOL PATTERNS:
+- Tools prefixed with `coingecko_` provide market data, prices, and trends directly.
+- Tools prefixed with `goweb3_` provide Web3 event data directly.
+- Tools prefixed with `hive_` often follow a discovery pattern:
+  * First, call a `hive_get_*_endpoints` tool to discover available API endpoints
+  * Then, use `hive_invoke_api_endpoint` with the endpoint name and required params
+  * If unsure about params, call `hive_get_api_endpoint_schema` first
+
+RESPONSE GUIDELINES:
+- Be concise and present data in a readable format
+- Use tables or bullet points for structured data
+- If a tool returns an error about missing params, explain what's needed
+- If no suitable tool exists, say so honestly rather than guessing"""
 
     # Build message history
     messages = [{"role": "system", "content": system_prompt}]
@@ -163,12 +171,20 @@ IMPORTANT RULES:
                 yield "\n⚠️ **Request too large.** Trying with fewer tools...\n"
                 groq_tools = mcp_client.get_groq_tools(servers=["coingecko"])
                 continue
-            if "tool_use_failed" in error_str or "not in request.tools" in error_str:
-                # LLM hallucinated a tool name - this happens with Hive meta-tools
+            if "Failed to parse tool call arguments as JSON" in error_str:
+                # LLM generated malformed JSON - retry once
+                logger.warning(f"LLM generated malformed JSON, retrying: {e}")
+                continue
+            if "not in request.tools" in error_str:
+                # LLM hallucinated a tool name
                 logger.warning(f"LLM hallucinated tool name: {e}")
-                yield "\n⚠️ That query requires a tool that isn't available. "
-                yield "Try asking differently or use a more specific question.\n"
+                yield "\n⚠️ The AI tried to call a tool that doesn't exist. "
+                yield "Try rephrasing your question.\n"
                 return
+            if "tool_use_failed" in error_str:
+                # Generic tool use failure - retry once
+                logger.warning(f"Tool use failed, retrying: {e}")
+                continue
             logger.error(f"Groq API error: {e}", exc_info=True)
             yield "\n❌ An error occurred. Please try again.\n"
             return
