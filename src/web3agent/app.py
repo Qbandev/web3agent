@@ -121,8 +121,22 @@ def stream_response(prompt: str, history: list[dict]):
     groq_tools = mcp_client.get_groq_tools()
     logger.info(f"Passing {len(groq_tools)} tools to LLM")
 
+    # System prompt to guide tool usage
+    system_prompt = """You are a Web3 assistant with access to blockchain tools.
+
+IMPORTANT RULES:
+1. ONLY call tools from the provided tools list. Never invent tool names.
+2. Some tools return lists of "endpoints" or "APIs" - these are NOT callable tools.
+   When you see endpoint names like "user_total_balance" or "retrieve_topic_metrics"
+   in a tool's response, you must use `hive_invoke_api_endpoint` to call them.
+3. For Hive wallet queries, use this pattern:
+   - Call `hive_invoke_api_endpoint` with: name="user_total_balance", params={"address": "0x...", "chain_id": 1}
+4. For crypto prices, use `coingecko_*` tools directly.
+5. For Web3 events, use `goweb3_*` tools directly.
+6. Be concise. Present data clearly with formatting."""
+
     # Build message history
-    messages = []
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in history[-5:]:  # Keep last 5 messages for context
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": prompt})
@@ -147,9 +161,14 @@ def stream_response(prompt: str, history: list[dict]):
                 return
             if "413" in error_str or "too large" in error_str.lower():
                 yield "\n⚠️ **Request too large.** Trying with fewer tools...\n"
-                # Try with only coingecko tools
                 groq_tools = mcp_client.get_groq_tools(servers=["coingecko"])
                 continue
+            if "tool_use_failed" in error_str or "not in request.tools" in error_str:
+                # LLM hallucinated a tool name - this happens with Hive meta-tools
+                logger.warning(f"LLM hallucinated tool name: {e}")
+                yield "\n⚠️ That query requires a tool that isn't available. "
+                yield "Try asking differently or use a more specific question.\n"
+                return
             logger.error(f"Groq API error: {e}", exc_info=True)
             yield "\n❌ An error occurred. Please try again.\n"
             return
