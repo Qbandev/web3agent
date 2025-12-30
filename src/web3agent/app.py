@@ -165,7 +165,17 @@ def stream_response(prompt: str, history: list[dict]):
                 except json.JSONDecodeError:
                     func_args = {}
 
-                yield f"🔧 Calling `{tool_name}`...\n"
+                # Fix hallucinated tool names (e.g., singular vs plural)
+                corrected_name = mcp_client.find_closest_tool(tool_name)
+                if not corrected_name:
+                    yield f"⚠️ Tool `{tool_name}` not found. Skipping...\n"
+                    continue
+                if corrected_name != tool_name:
+                    yield f"🔧 Calling `{corrected_name}` (corrected from `{tool_name}`)...\n"
+                    tool_name = corrected_name
+                else:
+                    yield f"🔧 Calling `{tool_name}`...\n"
+
                 logger.info(f"Tool call: {tool_name} with {len(func_args)} args")
 
                 # Execute tool via MCP client

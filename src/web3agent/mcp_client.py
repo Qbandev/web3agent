@@ -236,9 +236,7 @@ class MCPClient:
         Returns:
             List of "name: description" strings.
         """
-        filtered = (
-            [t for t in self.tools if t.server in servers] if servers else self.tools
-        )
+        filtered = [t for t in self.tools if t.server in servers] if servers else self.tools
         return [f"{t.name}: {t.description[:100]}" for t in filtered]
 
     def get_single_tool(self, tool_name: str) -> dict[str, Any] | None:
@@ -255,6 +253,46 @@ class MCPClient:
                 return t.to_groq_function()
         return None
 
+    def find_closest_tool(self, tool_name: str) -> str | None:
+        """Find the closest matching tool name (handles LLM hallucinations).
+
+        Args:
+            tool_name: The tool name from LLM (may be incorrect).
+
+        Returns:
+            The actual tool name if found/matched, or None.
+        """
+        # Exact match
+        tool_names = [t.name for t in self.tools]
+        if tool_name in tool_names:
+            return tool_name
+
+        # Try common fixes: singular/plural
+        if tool_name.endswith("s"):
+            singular = tool_name[:-1]
+            if singular in tool_names:
+                logger.warning(f"Tool name corrected: {tool_name} → {singular}")
+                return singular
+        else:
+            plural = tool_name + "s"
+            if plural in tool_names:
+                logger.warning(f"Tool name corrected: {tool_name} → {plural}")
+                return plural
+
+        # Try prefix match (same server, similar name)
+        for actual_name in tool_names:
+            # Check if they share a prefix and are very similar (1-2 chars diff)
+            shares_prefix = tool_name.startswith(actual_name[:20]) or actual_name.startswith(
+                tool_name[:20]
+            )
+            similar_length = abs(len(tool_name) - len(actual_name)) <= 2
+            if shares_prefix and similar_length:
+                logger.warning(f"Tool name corrected: {tool_name} → {actual_name}")
+                return actual_name
+
+        logger.error(f"Tool not found and no close match: {tool_name}")
+        return None
+
     def get_groq_tools(self, servers: list[str] | None = None) -> list[dict[str, Any]]:
         """Get all tools in Groq function format, filtered by server.
 
@@ -264,9 +302,7 @@ class MCPClient:
         Returns:
             List of tools in Groq function format.
         """
-        filtered = (
-            [t for t in self.tools if t.server in servers] if servers else self.tools
-        )
+        filtered = [t for t in self.tools if t.server in servers] if servers else self.tools
         return [t.to_groq_function() for t in filtered]
 
     def get_tools_by_server(self) -> dict[str, list[str]]:
