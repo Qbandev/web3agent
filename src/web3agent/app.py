@@ -136,7 +136,7 @@ You CANNOT: execute transactions, provide financial advice, or predict prices.
 ## TOOL CALLING RULES
 - Only call tools EXACTLY as named in your tools list. Never guess or modify tool names.
 - Provide valid JSON arguments. Use {} (empty object) for tools requiring no parameters.
-- If a tool returns an error about required parameters, call `hive_get_api_endpoint_schema` to learn the schema.
+- If a tool returns an error about required parameters, look for a `*_get_*_schema` tool to learn the correct format.
 
 ## MULTI-STEP PATTERNS
 Some data sources use a discovery pattern:
@@ -145,7 +145,7 @@ Some data sources use a discovery pattern:
 3. Endpoint names from step 1 are NOT tool names - they must be invoked via step 2
 
 ## ERROR HANDLING
-- If a tool fails, explain the error and suggest alternatives
+- If a tool call fails with parameter errors, call the schema tool to learn correct params, then RETRY
 - If you cannot find a suitable tool, say so honestly
 - Never fabricate data or pretend a tool call succeeded
 
@@ -161,7 +161,7 @@ Some data sources use a discovery pattern:
     messages.append({"role": "user", "content": prompt})
 
     tool_results = []
-    max_iterations = 3
+    max_iterations = 5  # Allow more iterations for discover → try → learn → retry patterns
 
     for _iteration in range(max_iterations):
         try:
