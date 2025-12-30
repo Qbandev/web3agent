@@ -144,7 +144,7 @@ Some data sources use a discovery pattern:
 2. Use `*_invoke_api_endpoint` with name="<endpoint>" and params={...} to call them
 3. Endpoint names from step 1 are NOT tool names - they must be invoked via step 2
 
-## ERROR HANDLING  
+## ERROR HANDLING
 - If a tool fails, explain the error and suggest alternatives
 - If you cannot find a suitable tool, say so honestly
 - Never fabricate data or pretend a tool call succeeded
