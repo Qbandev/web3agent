@@ -49,7 +49,6 @@ def render_sidebar() -> None:
             ("COINGECKO", "PRICE.FEED"),
             ("GOWEB3", "UTIL.CORE"),
             ("HIVE", "ANALYTICS.NET"),
-            ("ETHERSCAN", "EXPLORER.API"),
         ]
 
         for name, description in servers:

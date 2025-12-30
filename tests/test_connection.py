@@ -16,7 +16,7 @@ async def test_app_initialization():
 @pytest.mark.asyncio
 async def test_servers_configured():
     """Verify all expected servers are configured."""
-    expected_servers = ["hive", "coingecko", "goweb3", "etherscan"]
+    expected_servers = ["hive", "coingecko", "goweb3"]
     assert expected_servers == WEB3_SERVERS
 
 

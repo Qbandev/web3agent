@@ -19,10 +19,9 @@ Defined in `mcp_agent.config.yaml` - **no hardcoded URLs in code**:
 
 | Server | Transport | Description | Auth |
 |--------|-----------|-------------|------|
-| Etherscan | HTTP | Blockchain explorer, balances, transactions (60+ chains) | `ETHERSCAN_API_KEY` |
 | CoinGecko | HTTP | Price data, market caps, trending coins | None (public) |
 | GoWeb3 | HTTP | Web3 events search | None |
-| Hive | HTTP | Crypto market analytics | None |
+| Hive | HTTP | Crypto market analytics, wallet balances | None |
 
 ## Configuration Files
 
@@ -43,7 +42,6 @@ openai:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GROQ_API_KEY` | Yes | Groq API key for LLM |
-| `ETHERSCAN_API_KEY` | Yes | Etherscan API key for blockchain data |
 
 ## File Structure
 ```
@@ -125,7 +123,6 @@ docker build -t web3agent:local .
 docker run -d --name web3agent-test \
   -p 8501:8501 \
   -e GROQ_API_KEY="your-key" \
-  -e ETHERSCAN_API_KEY="your-key" \
   web3agent:local
 
 # Check health

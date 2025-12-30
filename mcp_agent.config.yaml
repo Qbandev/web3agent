@@ -34,14 +34,4 @@ mcp:
     goweb3:
       transport: streamable_http
       url: "https://mcp.goweb3.fyi/mcp/"
-    
-    # Etherscan - Blockchain explorer data (60+ chains)
-    # Requires API key: https://docs.etherscan.io/mcp-docs/introduction
-    etherscan:
-      transport: streamable_http
-      url: "https://mcp.etherscan.io/mcp"
-      headers:
-        Authorization: "Bearer ${ETHERSCAN_API_KEY}"
-      http_timeout_seconds: 60
-      read_timeout_seconds: 120
 
