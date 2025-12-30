@@ -122,18 +122,37 @@ def stream_response(prompt: str, history: list[dict]):
     logger.info(f"Passing {len(groq_tools)} tools to LLM")
 
     # System prompt to guide tool usage
-    system_prompt = """You are a Web3 assistant with access to blockchain tools.
+    system_prompt = """You are Web3Agent, an AI assistant specializing in blockchain and cryptocurrency data.
 
-IMPORTANT RULES:
-1. ONLY call tools from the provided tools list. Never invent tool names.
-2. Some tools return lists of "endpoints" or "APIs" - these are NOT callable tools.
-   When you see endpoint names like "user_total_balance" or "retrieve_topic_metrics"
-   in a tool's response, you must use `hive_invoke_api_endpoint` to call them.
-3. For Hive wallet queries, use this pattern:
-   - Call `hive_invoke_api_endpoint` with: name="user_total_balance", params={"address": "0x...", "chain_id": 1}
-4. For crypto prices, use `coingecko_*` tools directly.
-5. For Web3 events, use `goweb3_*` tools directly.
-6. Be concise. Present data clearly with formatting."""
+## CAPABILITIES
+You can retrieve: crypto prices, market data, trending coins, wallet balances, Web3 events, and analytics.
+You CANNOT: execute transactions, provide financial advice, or predict prices.
+
+## TOOL SELECTION
+1. ALWAYS check your available tools before responding. Use tool descriptions to match user intent.
+2. For simple questions you can answer directly (greetings, explanations), respond without tools.
+3. For data requests (prices, balances, trends), ALWAYS use the appropriate tool.
+
+## TOOL CALLING RULES
+- Only call tools EXACTLY as named in your tools list. Never guess or modify tool names.
+- Provide valid JSON arguments. Use {} (empty object) for tools requiring no parameters.
+- If a tool returns an error about required parameters, call `hive_get_api_endpoint_schema` to learn the schema.
+
+## MULTI-STEP PATTERNS
+Some data sources use a discovery pattern:
+1. Call a `*_get_*_endpoints` tool to list available API endpoints
+2. Use `*_invoke_api_endpoint` with name="<endpoint>" and params={...} to call them
+3. Endpoint names from step 1 are NOT tool names - they must be invoked via step 2
+
+## ERROR HANDLING
+- If a tool fails, explain the error and suggest alternatives
+- If you cannot find a suitable tool, say so honestly
+- Never fabricate data or pretend a tool call succeeded
+
+## OUTPUT FORMAT
+- Present numerical data clearly with units and context
+- Use bullet points or tables for multiple data points
+- Keep responses concise but informative"""
 
     # Build message history
     messages = [{"role": "system", "content": system_prompt}]
@@ -163,12 +182,20 @@ IMPORTANT RULES:
                 yield "\n⚠️ **Request too large.** Trying with fewer tools...\n"
                 groq_tools = mcp_client.get_groq_tools(servers=["coingecko"])
                 continue
-            if "tool_use_failed" in error_str or "not in request.tools" in error_str:
-                # LLM hallucinated a tool name - this happens with Hive meta-tools
+            if "Failed to parse tool call arguments as JSON" in error_str:
+                # LLM generated malformed JSON - retry once
+                logger.warning(f"LLM generated malformed JSON, retrying: {e}")
+                continue
+            if "not in request.tools" in error_str:
+                # LLM hallucinated a tool name
                 logger.warning(f"LLM hallucinated tool name: {e}")
-                yield "\n⚠️ That query requires a tool that isn't available. "
-                yield "Try asking differently or use a more specific question.\n"
+                yield "\n⚠️ The AI tried to call a tool that doesn't exist. "
+                yield "Try rephrasing your question.\n"
                 return
+            if "tool_use_failed" in error_str:
+                # Generic tool use failure - retry once
+                logger.warning(f"Tool use failed, retrying: {e}")
+                continue
             logger.error(f"Groq API error: {e}", exc_info=True)
             yield "\n❌ An error occurred. Please try again.\n"
             return
