@@ -22,6 +22,117 @@ logger = logging.getLogger(__name__)
 # Security: Maximum response size to prevent memory exhaustion
 MAX_RESPONSE_SIZE = 100000  # 100KB
 
+# Rich metadata for MCP servers - helps LLM select the right tools
+# Sources:
+# - https://hiveintelligence.xyz/crypto-mcp
+# - https://docs.coingecko.com/docs/mcp-server
+# - https://www.pulsemcp.com/servers/roadahead1-goweb3
+SERVER_METADATA: dict[str, dict[str, Any]] = {
+    "hive": {
+        "name": "Hive Intelligence",
+        "description": (
+            "Comprehensive blockchain data access for 60+ chains with real-time crypto data, "
+            "DeFi analytics, and on-chain intelligence. Provides portfolio tracking, wallet "
+            "analytics, token metrics, DEX data, NFT analytics, and social sentiment."
+        ),
+        "categories": [
+            "Market Data",
+            "On-Chain DEX",
+            "Portfolio & Wallet",
+            "Token & Contract",
+            "DeFi Protocol",
+            "NFT Analytics",
+            "Security",
+            "Network Infrastructure",
+            "Search & Discovery",
+            "Social Sentiment",
+        ],
+        "usage_pattern": (
+            "DISCOVERY PATTERN: 1) Call hive_get_*_endpoints to list available API endpoints, "
+            "2) Use hive_invoke_api_endpoint with name=<endpoint> and params={...} to call them. "
+            "Endpoint names like 'user_total_balance' are NOT tools - they must be invoked via "
+            "hive_invoke_api_endpoint."
+        ),
+        "capabilities": [
+            "Wallet balances across multiple chains",
+            "Token holdings and portfolio analysis",
+            "Transaction history",
+            "DEX liquidity pools and swap data",
+            "DeFi protocol TVL and yields",
+            "NFT collection analytics",
+            "Social sentiment analysis (requires paid LunarCrush API)",
+            "Smart contract security analysis",
+        ],
+        "limitations": [
+            "Social sentiment endpoints require LunarCrush subscription",
+            "Some endpoints may have rate limits",
+        ],
+    },
+    "coingecko": {
+        "name": "CoinGecko",
+        "description": (
+            "Real-time cryptocurrency market data for 15,000+ coins across 1,000+ exchanges. "
+            "Provides aggregated prices, market cap, trading volume, trending coins, historical "
+            "data, NFT floor prices, and crypto categories."
+        ),
+        "categories": [
+            "Price Data",
+            "Market Data",
+            "Trending",
+            "Historical Data",
+            "NFT Data",
+            "Categories",
+            "Exchanges",
+        ],
+        "usage_pattern": (
+            "DIRECT CALL: CoinGecko tools can be called directly with their parameters. "
+            "Use coingecko_get_coins_markets for market data, coingecko_get_simple_price for "
+            "quick price lookups, coingecko_get_search_trending for trending coins."
+        ),
+        "capabilities": [
+            "Current prices in any fiat currency",
+            "Market cap rankings",
+            "24h/7d/30d price changes",
+            "Trading volume across exchanges",
+            "Top gainers and losers",
+            "Trending coins and searches",
+            "NFT collection floor prices",
+            "Historical OHLCV data",
+            "Crypto category analysis (DeFi, Meme, Layer 1, AI, etc.)",
+        ],
+        "limitations": [
+            "Public API: 30 calls/min, past 1 year historical data",
+            "Some advanced features require Pro API key",
+        ],
+    },
+    "goweb3": {
+        "name": "GoWeb3",
+        "description": (
+            "Web3 events and news aggregation from GoWeb3.fyi. Search and discover blockchain "
+            "conferences, hackathons, meetups, and Web3 happenings by region and time period."
+        ),
+        "categories": [
+            "Events",
+            "News",
+            "Regional Ecosystems",
+        ],
+        "usage_pattern": (
+            "DIRECT CALL: Use goweb3_search_events_by_region with region parameter, or "
+            "goweb3_search_events_by_month with year/month parameters to find Web3 events."
+        ),
+        "capabilities": [
+            "Search Web3 events by geographic region",
+            "Search events by month/year",
+            "Discover conferences, hackathons, meetups",
+            "Analyze regional blockchain ecosystems",
+        ],
+        "limitations": [
+            "Limited to events indexed by GoWeb3.fyi",
+            "May not include all local/small events",
+        ],
+    },
+}
+
 
 @dataclass
 class Tool:
@@ -31,35 +142,80 @@ class Tool:
     description: str
     parameters: dict[str, Any]
     server: str
+    category: str = ""  # Tool category for grouping
 
     # Parameter type hints for common tools (prevents LLM type errors)
     TYPE_HINTS: dict[str, dict[str, type]] = field(
         default_factory=lambda: {
             "coingecko_get_coins_markets": {"page": int, "per_page": int, "sparkline": bool},
             "coingecko_get_simple_price": {"include_market_cap": bool, "include_24hr_vol": bool},
-            "etherscan_balanceERC20": {"chainid": int, "page": int, "offset": int},
-            "etherscan_balanceNative": {"chainid": int},
-            "etherscan_normalTxsByAddress": {"chainid": int, "page": int, "offset": int},
             "goweb3_search_events_by_month": {"limit": int},
             "goweb3_search_events_by_region": {"limit": int},
+            "hive_invoke_api_endpoint": {},  # Dynamic args based on endpoint
         },
         repr=False,
     )
 
+    # Tool category mapping based on name patterns
+    CATEGORY_PATTERNS: dict[str, str] = field(
+        default_factory=lambda: {
+            "price": "Price Data",
+            "market": "Market Data",
+            "balance": "Portfolio & Wallet",
+            "wallet": "Portfolio & Wallet",
+            "portfolio": "Portfolio & Wallet",
+            "token": "Token & Contract",
+            "contract": "Token & Contract",
+            "dex": "On-Chain DEX",
+            "pool": "On-Chain DEX",
+            "swap": "On-Chain DEX",
+            "nft": "NFT Analytics",
+            "defi": "DeFi Protocol",
+            "tvl": "DeFi Protocol",
+            "yield": "DeFi Protocol",
+            "security": "Security",
+            "audit": "Security",
+            "sentiment": "Social Sentiment",
+            "social": "Social Sentiment",
+            "trending": "Trending",
+            "search": "Search & Discovery",
+            "event": "Events",
+            "network": "Network Infrastructure",
+            "gas": "Network Infrastructure",
+        },
+        repr=False,
+    )
+
+    def infer_category(self) -> str:
+        """Infer tool category from name patterns."""
+        name_lower = self.name.lower()
+        for pattern, category in self.CATEGORY_PATTERNS.items():
+            if pattern in name_lower:
+                return category
+        return "General"
+
     def to_groq_function(self) -> dict[str, Any]:
-        """Convert to Groq function format with type hints in description."""
+        """Convert to Groq function format with rich context."""
+        # Get server metadata for context
+        server_meta = SERVER_METADATA.get(self.server, {})
+        server_name = server_meta.get("name", self.server.upper())
+
         # Add type hints to description to help LLM
         type_hints = self.TYPE_HINTS.get(self.name, {})
         hint_text = ""
         if type_hints:
             hints = [f"{k}={t.__name__}" for k, t in type_hints.items()]
-            hint_text = f" Types: {', '.join(hints)}"
+            hint_text = f" [Types: {', '.join(hints)}]"
+
+        # Build enhanced description with category
+        category = self.category or self.infer_category()
+        enhanced_desc = f"[{server_name}|{category}] {self.description}{hint_text}"
 
         return {
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": f"[{self.server}] {self.description}{hint_text}",
+                "description": enhanced_desc,
                 "parameters": self.parameters,
             },
         }
@@ -99,6 +255,34 @@ class MCPClient:
     @property
     def connected(self) -> bool:
         return self._connected
+
+    def get_server_metadata(self) -> dict[str, dict[str, Any]]:
+        """Get rich metadata for all configured servers.
+
+        Returns dict with server descriptions, capabilities, and usage patterns.
+        """
+        return {
+            name: SERVER_METADATA.get(name, {"name": name, "description": f"MCP server: {name}"})
+            for name in self._server_configs
+        }
+
+    def get_server_context_for_llm(self) -> str:
+        """Generate a context string for the LLM about available servers.
+
+        This helps the LLM understand what each server provides and how to use it.
+        """
+        lines = ["## Available MCP Servers and Capabilities\n"]
+        for name, meta in self.get_server_metadata().items():
+            lines.append(f"### {meta.get('name', name)}")
+            lines.append(f"**Description:** {meta.get('description', 'No description')}")
+            if "usage_pattern" in meta:
+                lines.append(f"**Usage:** {meta['usage_pattern']}")
+            if "capabilities" in meta:
+                lines.append("**Capabilities:**")
+                for cap in meta["capabilities"][:5]:  # Limit to avoid token overflow
+                    lines.append(f"  - {cap}")
+            lines.append("")
+        return "\n".join(lines)
 
     def _load_server_configs(self, app) -> dict[str, dict[str, Any]]:
         """Load server configurations from mcp_agent.config.yaml."""
@@ -165,7 +349,7 @@ class MCPClient:
 
             logger.info(f"Discovered {len(raw_tools)} tools from MCP servers")
 
-            # Parse tools into our format
+            # Parse tools into our format with enhanced metadata
             self.tools = []
             for t in raw_tools:
                 name = getattr(t, "name", None)
@@ -187,14 +371,20 @@ class MCPClient:
                 if not params or not isinstance(params, dict):
                     params = {"type": "object", "properties": {}, "required": []}
 
-                self.tools.append(
-                    Tool(
-                        name=name,
-                        description=desc or f"Tool from {server}",
-                        parameters=params,
-                        server=server,
-                    )
+                # Create tool and let it infer its category
+                tool = Tool(
+                    name=name,
+                    description=desc or f"Tool from {server}",
+                    parameters=params,
+                    server=server,
                 )
+                tool.category = tool.infer_category()
+                self.tools.append(tool)
+
+            # Log tool distribution by server and category
+            by_server = self.get_tools_by_server()
+            for srv, tool_names in by_server.items():
+                logger.info(f"Server '{srv}': {len(tool_names)} tools")
 
             self._connected = True
             logger.info(f"Ready! {len(self.tools)} tools available")
