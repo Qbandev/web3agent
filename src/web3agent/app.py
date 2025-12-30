@@ -336,30 +336,9 @@ def main() -> None:
         st.session_state.mcp_attempted = True
         init_mcp_connection()
 
-    # Status display
-    if st.session_state.get("mcp_connecting"):
-        st.markdown(
-            '<p style="text-align: center; font-family: Share Tech Mono; color: #ffcc00;" class="blinking">'
-            "// CONNECTING... //"
-            "</p>",
-            unsafe_allow_html=True,
-        )
-    elif st.session_state.get("mcp_connected"):
-        tool_count = len(st.session_state.get("mcp_tools", []))
-        st.markdown(
-            f'<p style="text-align: center; font-family: Share Tech Mono; color: #00ff9f;">'
-            f"// READY // {tool_count} TOOLS //"
-            f"</p>",
-            unsafe_allow_html=True,
-        )
-    else:
+    # Show error only if connection failed
+    if not st.session_state.get("mcp_connected") and not st.session_state.get("mcp_connecting"):
         error = st.session_state.get("mcp_error", "")
-        st.markdown(
-            '<p style="text-align: center; font-family: Share Tech Mono; color: #ff0066;">'
-            "// OFFLINE //"
-            "</p>",
-            unsafe_allow_html=True,
-        )
         if error:
             st.warning(f"Connection error: {error}")
 
