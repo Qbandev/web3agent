@@ -2,7 +2,7 @@
 mcp-agent>=0.0.21
 streamlit>=1.40.0
 anyio>=4.8.0
-groq>=1.2.0
+groq>=1.4.0
 
 # Development
 pytest>=8.3.4
